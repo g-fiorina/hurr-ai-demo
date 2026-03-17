@@ -1,0 +1,15 @@
+# Git and IDE
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.vscode
+.idea
+
+# Environment (loaded at runtime via docker-compose)
+.env
+
+# Docs and misc
+README.md
+*.md

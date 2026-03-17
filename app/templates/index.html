@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hurr AI – Multimodal Embedding Benchmark</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .fade-in { animation: fadeIn .25s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .spinner { border: 3px solid #e5e7eb; border-top-color: #6366f1; border-radius: 50%; width: 1.5rem; height: 1.5rem; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="h-full bg-gray-50 text-gray-800 font-sans">
+
+  <!-- Navbar -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center h-14 justify-between">
+      <a href="/" class="text-lg font-bold text-indigo-600 tracking-tight">Hurr&nbsp;AI</a>
+      <div class="flex gap-1">
+        <button onclick="switchTab('upload')" id="btn-upload"
+                class="tab-btn px-4 py-2 text-sm font-medium rounded-md transition-colors">Upload</button>
+        <button onclick="switchTab('search')" id="btn-search"
+                class="tab-btn px-4 py-2 text-sm font-medium rounded-md transition-colors">Search</button>
+        <button onclick="switchTab('history')" id="btn-history"
+                class="tab-btn px-4 py-2 text-sm font-medium rounded-md transition-colors">History</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- ==================== UPLOAD TAB ==================== -->
+    <section id="tab-upload" class="tab-content">
+      <div class="max-w-2xl mx-auto">
+        <h2 class="text-2xl font-semibold mb-1">Ingest Images</h2>
+        <p class="text-gray-500 text-sm mb-6">Upload individual images or a ZIP archive. Embeddings will be generated using Voyage AI, Jina AI, and Cohere.</p>
+
+        <form id="upload-form" class="space-y-4">
+          <label class="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/40 transition-colors"
+                 id="drop-zone">
+            <svg class="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"/></svg>
+            <span class="text-sm text-gray-500" id="file-label">Drag & drop or click to choose files (.jpg, .png, .zip)</span>
+            <input type="file" name="file" accept="image/*,.zip" class="hidden" id="file-input" />
+          </label>
+
+          <button type="submit" id="upload-btn"
+                  class="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <span>Upload &amp; Embed</span>
+            <div class="spinner hidden" id="upload-spinner"></div>
+          </button>
+        </form>
+
+        <div id="upload-result" class="mt-6 space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- ==================== SEARCH TAB ==================== -->
+    <section id="tab-search" class="tab-content">
+      <h2 class="text-2xl font-semibold mb-1">Search &amp; Compare</h2>
+      <p class="text-gray-500 text-sm mb-6">Query by text or image. Results are shown side-by-side for each embedding provider.</p>
+
+      <form id="search-form" class="flex flex-col sm:flex-row gap-3 mb-8">
+        <input type="text" name="query_text" id="search-text" placeholder="Type a text query..."
+               class="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
+        <label class="flex items-center gap-2 border border-gray-300 rounded-lg px-4 py-2.5 text-sm cursor-pointer hover:bg-gray-50 transition-colors">
+          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
+          <span id="search-file-label" class="text-gray-500">Image query</span>
+          <input type="file" name="query_image" accept="image/*" class="hidden" id="search-image-input" />
+        </label>
+        <button type="submit" id="search-btn"
+                class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors disabled:opacity-50">
+          <span>Search</span>
+          <div class="spinner hidden" id="search-spinner"></div>
+        </button>
+      </form>
+
+      <div id="search-results"></div>
+    </section>
+
+    <!-- ==================== HISTORY TAB ==================== -->
+    <section id="tab-history" class="tab-content">
+      <h2 class="text-2xl font-semibold mb-1">Query History</h2>
+      <p class="text-gray-500 text-sm mb-6">Past searches and their comparative results.</p>
+      <div id="history-list" class="space-y-4"></div>
+    </section>
+
+  </main>
+
+<script>
+/* ------------------------------------------------------------------ */
+/*  Tab switching                                                      */
+/* ------------------------------------------------------------------ */
+const TABS = ['upload', 'search', 'history'];
+
+function switchTab(name) {
+  TABS.forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === name);
+    const btn = document.getElementById('btn-' + t);
+    if (t === name) {
+      btn.classList.add('bg-indigo-100', 'text-indigo-700');
+      btn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+    } else {
+      btn.classList.remove('bg-indigo-100', 'text-indigo-700');
+      btn.classList.add('text-gray-600', 'hover:bg-gray-100');
+    }
+  });
+  if (name === 'history') loadHistory();
+  history.replaceState(null, '', name === 'upload' ? '/' : '/' + name);
+}
+
+/* init from server-side variable */
+switchTab('{{ tab }}');
+
+/* ------------------------------------------------------------------ */
+/*  Upload                                                             */
+/* ------------------------------------------------------------------ */
+const fileInput = document.getElementById('file-input');
+const fileLabel = document.getElementById('file-label');
+
+fileInput.addEventListener('change', () => {
+  fileLabel.textContent = fileInput.files.length ? fileInput.files[0].name : 'Drag & drop or click to choose files';
+});
+
+/* drag-and-drop */
+const dropZone = document.getElementById('drop-zone');
+['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('border-indigo-400','bg-indigo-50/40'); }));
+['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('border-indigo-400','bg-indigo-50/40'); }));
+dropZone.addEventListener('drop', ev => {
+  if (ev.dataTransfer.files.length) {
+    fileInput.files = ev.dataTransfer.files;
+    fileLabel.textContent = ev.dataTransfer.files[0].name;
+  }
+});
+
+document.getElementById('upload-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!fileInput.files.length) return;
+
+  const btn = document.getElementById('upload-btn');
+  const spinner = document.getElementById('upload-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('hidden');
+
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+
+  try {
+    const resp = await fetch('/upload', { method: 'POST', body: fd });
+    const data = await resp.json();
+    renderUploadResult(data);
+  } catch (err) {
+    renderUploadResult({ errors: [err.message] });
+  } finally {
+    btn.disabled = false;
+    spinner.classList.add('hidden');
+  }
+});
+
+function renderUploadResult(data) {
+  const el = document.getElementById('upload-result');
+  let html = '';
+
+  if (data.ingested && data.ingested.length) {
+    html += '<div class="bg-green-50 border border-green-200 rounded-lg p-4 fade-in">';
+    html += `<p class="font-medium text-green-800 mb-2">Successfully ingested ${data.ingested.length} image(s)</p>`;
+    html += '<ul class="text-sm text-green-700 space-y-1">';
+    data.ingested.forEach(img => {
+      html += `<li><span class="font-mono">${img.filename}</span> — providers: ${img.providers_ok.join(', ')}</li>`;
+    });
+    html += '</ul></div>';
+  }
+  if (data.errors && data.errors.length) {
+    html += '<div class="bg-red-50 border border-red-200 rounded-lg p-4 fade-in">';
+    html += '<p class="font-medium text-red-800 mb-2">Errors</p>';
+    html += '<ul class="text-sm text-red-700 space-y-1">';
+    data.errors.forEach(e => { html += `<li>${e}</li>`; });
+    html += '</ul></div>';
+  }
+  el.innerHTML = html;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Search                                                             */
+/* ------------------------------------------------------------------ */
+const searchImageInput = document.getElementById('search-image-input');
+searchImageInput.addEventListener('change', () => {
+  document.getElementById('search-file-label').textContent = searchImageInput.files.length ? searchImageInput.files[0].name : 'Image query';
+});
+
+document.getElementById('search-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('search-btn');
+  const spinner = document.getElementById('search-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('hidden');
+
+  const fd = new FormData();
+  const text = document.getElementById('search-text').value.trim();
+  if (searchImageInput.files.length) {
+    fd.append('query_image', searchImageInput.files[0]);
+  }
+  if (text) fd.append('query_text', text);
+
+  try {
+    const resp = await fetch('/search', { method: 'POST', body: fd });
+    const data = await resp.json();
+    renderSearchResults(data);
+  } catch (err) {
+    document.getElementById('search-results').innerHTML =
+      `<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    spinner.classList.add('hidden');
+  }
+});
+
+function renderSearchResults(data) {
+  const el = document.getElementById('search-results');
+  if (data.error) {
+    el.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">${data.error}</div>`;
+    return;
+  }
+  el.innerHTML = buildComparisonGrid(data.results);
+}
+
+const PROVIDER_LABELS = {
+  // voyage_1024: 'Voyage 1024',  // disabled – max search quality
+  voyage_2048: 'Voyage 2048',
+  // jina_1024: 'Jina 1024',  // disabled – max search quality
+  jina_2048: 'Jina 2048 (Capped to 3M pixels)',
+  // cohere_1024: 'Cohere 1024',  // disabled – max search quality
+  cohere_1536: 'Cohere 1536',
+};
+const PROVIDER_COLORS = {
+  // voyage_1024: { ... },  // disabled – max search quality
+  voyage_2048: { bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-800', accent: 'text-purple-600' },
+  // jina_1024: { ... },  // disabled – max search quality
+  jina_2048:   { bg: 'bg-cyan-50',   border: 'border-cyan-200',   badge: 'bg-cyan-100 text-cyan-800',     accent: 'text-cyan-600'    },
+  // cohere_1024: { ... },  // disabled – max search quality
+  cohere_1536: { bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-800', accent: 'text-orange-600' },
+};
+
+function buildComparisonGrid(results) {
+  const providers = ['voyage_2048', 'jina_2048', 'cohere_1536'];
+  let html = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 fade-in">';
+
+  providers.forEach(p => {
+    const c = PROVIDER_COLORS[p] || PROVIDER_COLORS.cohere_1536;
+    const hits = results[p] || [];
+    const label = PROVIDER_LABELS[p] || p;
+    html += `<div class="${c.bg} ${c.border} border rounded-xl p-4">`;
+    html += `<h3 class="font-semibold text-sm uppercase tracking-wide ${c.accent} mb-3">${label}</h3>`;
+
+    if (!hits.length) {
+      html += '<p class="text-sm text-gray-400 italic">No results</p>';
+    } else {
+      hits.forEach((h, i) => {
+        html += `<div class="flex items-center gap-3 mb-3 last:mb-0">`;
+        html += `<span class="text-xs font-bold ${c.badge} rounded-full w-6 h-6 flex items-center justify-center">${i+1}</span>`;
+        html += `<img src="/images/${h.image_id}" class="w-14 h-14 object-cover rounded-lg border border-gray-200" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>'"/>`;
+        html += `<div class="min-w-0 flex-1"><p class="text-xs font-medium truncate">${h.filename}</p>`;
+        html += `<p class="text-xs text-gray-500">Score: ${h.similarity}</p></div>`;
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+/* ------------------------------------------------------------------ */
+/*  History                                                            */
+/* ------------------------------------------------------------------ */
+async function loadHistory() {
+  const el = document.getElementById('history-list');
+  el.innerHTML = '<div class="flex justify-center py-8"><div class="spinner"></div></div>';
+
+  try {
+    const resp = await fetch('/api/history');
+    const data = await resp.json();
+    renderHistory(data.queries || []);
+  } catch (err) {
+    el.innerHTML = `<div class="text-red-600 text-sm">${err.message}</div>`;
+  }
+}
+
+function renderHistory(queries) {
+  const el = document.getElementById('history-list');
+  if (!queries.length) {
+    el.innerHTML = '<p class="text-gray-400 text-sm italic py-4">No queries yet.</p>';
+    return;
+  }
+
+  let html = '';
+  queries.forEach(q => {
+    const ts = q.created_at ? new Date(q.created_at).toLocaleString() : '';
+    const badge = q.query_type === 'text'
+      ? '<span class="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">text</span>'
+      : '<span class="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5">image</span>';
+
+    html += `<details class="group border border-gray-200 rounded-xl bg-white fade-in">`;
+    html += `<summary class="flex items-center gap-3 cursor-pointer px-5 py-3 select-none hover:bg-gray-50 transition-colors rounded-xl">`;
+    html += `${badge}`;
+    if (q.has_query_image) {
+      html += `<img src="/queries/${q.id}/query-image" class="w-8 h-8 object-cover rounded border border-gray-200" alt="Query" />`;
+    }
+    html += `<span class="flex-1 text-sm font-medium truncate">${escHtml(q.query_content)}</span>`;
+    html += `<span class="text-xs text-gray-400 shrink-0">${ts}</span>`;
+    html += `<svg class="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`;
+    html += '</summary>';
+    html += `<div class="px-5 pb-4">${buildComparisonGrid(q.results)}</div>`;
+    html += '</details>';
+  });
+  el.innerHTML = html;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
