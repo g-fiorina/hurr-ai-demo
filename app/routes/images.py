@@ -47,21 +47,32 @@ def get_query_image(query_id: int) -> Response:
 
 @router.get("/api/images")
 def list_images() -> JSONResponse:
-    """List all uploaded images."""
+    """List all uploaded images with their embedding status."""
     db.connect(reuse_if_open=True)
     try:
+        from peewee import prefetch
+        from app.models import Embedding
+        
         images = Image.select().order_by(Image.created_at.desc())
-        return JSONResponse({
-            "images": [
-                {
-                    "id": img.id,
-                    "filename": img.filename,
-                    "content_type": img.content_type,
-                    "created_at": img.created_at.isoformat() if img.created_at else None,
+        embeddings = Embedding.select(Embedding.image, Embedding.provider_name)
+        images_with_embeddings = prefetch(images, embeddings)
+        
+        results = []
+        for img in images_with_embeddings:
+            provs = {e.provider_name for e in img.embeddings}
+            results.append({
+                "id": img.id,
+                "filename": img.filename,
+                "content_type": img.content_type,
+                "created_at": img.created_at.isoformat() if img.created_at else None,
+                "embeddings": {
+                    "voyage_2048": "voyage_2048" in provs,
+                    "jina_2048": "jina_2048" in provs,
+                    "cohere_1536": "cohere_1536" in provs,
                 }
-                for img in images
-            ]
-        })
+            })
+            
+        return JSONResponse({"images": results})
     finally:
         if not db.is_closed():
             db.close()
