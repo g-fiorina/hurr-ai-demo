@@ -92,3 +92,51 @@ def delete_image(image_id: int) -> JSONResponse:
     finally:
         if not db.is_closed():
             db.close()
+
+@router.delete("/api/images/cleanup/missing-any")
+def cleanup_missing_any() -> JSONResponse:
+    """Delete all images that are missing at least one embedding."""
+    db.connect(reuse_if_open=True)
+    try:
+        from peewee import fn
+        from app.models import Embedding, Image
+
+        # Subquery: image IDs that have exactly 3 embeddings
+        valid_image_ids = Embedding.select(Embedding.image).group_by(Embedding.image).having(fn.COUNT(Embedding.id) == 3)
+        
+        # Select images to delete
+        images_to_delete = Image.select().where(Image.id.not_in(valid_image_ids))
+        
+        count = 0
+        for img in images_to_delete:
+            img.delete_instance(recursive=True)
+            count += 1
+            
+        return JSONResponse({"status": "ok", "deleted": count})
+    finally:
+        if not db.is_closed():
+            db.close()
+
+@router.delete("/api/images/cleanup/missing-all")
+def cleanup_missing_all() -> JSONResponse:
+    """Delete all images that have no embeddings at all."""
+    db.connect(reuse_if_open=True)
+    try:
+        from peewee import fn
+        from app.models import Embedding, Image
+
+        # Subquery: image IDs that have at least 1 embedding
+        valid_image_ids = Embedding.select(Embedding.image).group_by(Embedding.image).having(fn.COUNT(Embedding.id) > 0)
+        
+        # Select images to delete
+        images_to_delete = Image.select().where(Image.id.not_in(valid_image_ids))
+        
+        count = 0
+        for img in images_to_delete:
+            img.delete_instance(recursive=True)
+            count += 1
+            
+        return JSONResponse({"status": "ok", "deleted": count})
+    finally:
+        if not db.is_closed():
+            db.close()

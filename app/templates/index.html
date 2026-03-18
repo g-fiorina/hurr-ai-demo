@@ -92,8 +92,20 @@
 
     <!-- ==================== MANAGE TAB ==================== -->
     <section id="tab-manage" class="tab-content">
-      <h2 class="text-2xl font-semibold mb-1">Manage Images</h2>
-      <p class="text-gray-500 text-sm mb-6">View and delete images stored in the database. Check if embeddings are generated correctly.</p>
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
+        <div>
+          <h2 class="text-2xl font-semibold mb-1">Manage Images</h2>
+          <p class="text-gray-500 text-sm">View and delete images stored in the database. Check if embeddings are generated correctly.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="cleanupImages('missing-all')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-sm font-medium py-2 px-4 rounded-lg transition-colors whitespace-nowrap">
+            Delete Missing All
+          </button>
+          <button onclick="cleanupImages('missing-any')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-sm font-medium py-2 px-4 rounded-lg transition-colors whitespace-nowrap">
+            Delete Missing Any
+          </button>
+        </div>
+      </div>
       <div class="overflow-x-auto bg-white border border-gray-200 rounded-lg">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
@@ -441,6 +453,27 @@ async function deleteImage(id) {
     }
   } catch (err) {
     alert('Failed to delete image: ' + err.message);
+  }
+}
+
+async function cleanupImages(type) {
+  const msg = type === 'missing-all' 
+    ? 'Are you sure you want to delete ALL images that have NO embeddings?' 
+    : 'Are you sure you want to delete ALL images that are missing ONE OR MORE embeddings?';
+    
+  if (!confirm(msg)) return;
+  
+  try {
+    const resp = await fetch(`/api/images/cleanup/${type}`, { method: 'DELETE' });
+    const data = await resp.json();
+    if (resp.ok) {
+      alert(`Successfully deleted ${data.deleted} images.`);
+      loadManageImages();
+    } else {
+      alert(data.detail || 'Failed to cleanup images');
+    }
+  } catch (err) {
+    alert('Failed to cleanup images: ' + err.message);
   }
 }
 </script>
