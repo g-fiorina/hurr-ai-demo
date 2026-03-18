@@ -53,3 +53,8 @@ async def search_page(request: Request) -> HTMLResponse:
 @app.get("/history", response_class=HTMLResponse)
 async def history_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("index.html", {"request": request, "tab": "history"})
+
+
+@app.get("/manage", response_class=HTMLResponse)
+async def manage_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("index.html", {"request": request, "tab": "manage"})

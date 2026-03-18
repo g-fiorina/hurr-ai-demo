@@ -27,6 +27,8 @@
                 class="tab-btn px-4 py-2 text-sm font-medium rounded-md transition-colors">Search</button>
         <button onclick="switchTab('history')" id="btn-history"
                 class="tab-btn px-4 py-2 text-sm font-medium rounded-md transition-colors">History</button>
+        <button onclick="switchTab('manage')" id="btn-manage"
+                class="tab-btn px-4 py-2 text-sm font-medium rounded-md transition-colors">Manage</button>
       </div>
     </div>
   </nav>
@@ -44,7 +46,7 @@
                  id="drop-zone">
             <svg class="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"/></svg>
             <span class="text-sm text-gray-500" id="file-label">Drag & drop or click to choose files (.jpg, .png, .zip)</span>
-            <input type="file" name="file" accept="image/*,.zip" class="hidden" id="file-input" />
+            <input type="file" name="file" accept="image/*,.zip" class="hidden" id="file-input" multiple />
           </label>
 
           <button type="submit" id="upload-btn"
@@ -88,13 +90,35 @@
       <div id="history-list" class="space-y-4"></div>
     </section>
 
+    <!-- ==================== MANAGE TAB ==================== -->
+    <section id="tab-manage" class="tab-content">
+      <h2 class="text-2xl font-semibold mb-1">Manage Images</h2>
+      <p class="text-gray-500 text-sm mb-6">View and delete images stored in the database.</p>
+      <div class="overflow-x-auto bg-white border border-gray-200 rounded-lg">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preview</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filename</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content Type</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
+              <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="manage-list" class="bg-white divide-y divide-gray-200">
+            <!-- Images injected here -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
   </main>
 
 <script>
 /* ------------------------------------------------------------------ */
 /*  Tab switching                                                      */
 /* ------------------------------------------------------------------ */
-const TABS = ['upload', 'search', 'history'];
+const TABS = ['upload', 'search', 'history', 'manage'];
 
 function switchTab(name) {
   TABS.forEach(t => {
@@ -109,6 +133,7 @@ function switchTab(name) {
     }
   });
   if (name === 'history') loadHistory();
+  if (name === 'manage') loadManageImages();
   history.replaceState(null, '', name === 'upload' ? '/' : '/' + name);
 }
 
@@ -122,7 +147,13 @@ const fileInput = document.getElementById('file-input');
 const fileLabel = document.getElementById('file-label');
 
 fileInput.addEventListener('change', () => {
-  fileLabel.textContent = fileInput.files.length ? fileInput.files[0].name : 'Drag & drop or click to choose files';
+  if (fileInput.files.length === 0) {
+    fileLabel.textContent = 'Drag & drop or click to choose files';
+  } else if (fileInput.files.length === 1) {
+    fileLabel.textContent = fileInput.files[0].name;
+  } else {
+    fileLabel.textContent = `${fileInput.files.length} files selected`;
+  }
 });
 
 /* drag-and-drop */
@@ -132,7 +163,11 @@ const dropZone = document.getElementById('drop-zone');
 dropZone.addEventListener('drop', ev => {
   if (ev.dataTransfer.files.length) {
     fileInput.files = ev.dataTransfer.files;
-    fileLabel.textContent = ev.dataTransfer.files[0].name;
+    if (ev.dataTransfer.files.length === 1) {
+      fileLabel.textContent = ev.dataTransfer.files[0].name;
+    } else {
+      fileLabel.textContent = `${ev.dataTransfer.files.length} files selected`;
+    }
   }
 });
 
@@ -146,7 +181,9 @@ document.getElementById('upload-form').addEventListener('submit', async (e) => {
   spinner.classList.remove('hidden');
 
   const fd = new FormData();
-  fd.append('file', fileInput.files[0]);
+  for (let i = 0; i < fileInput.files.length; i++) {
+    fd.append('files', fileInput.files[i]);
+  }
 
   try {
     const resp = await fetch('/upload', { method: 'POST', body: fd });
@@ -324,6 +361,61 @@ function escHtml(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Manage                                                            */
+/* ------------------------------------------------------------------ */
+async function loadManageImages() {
+  const el = document.getElementById('manage-list');
+  el.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center"><div class="spinner inline-block"></div></td></tr>';
+
+  try {
+    const resp = await fetch('/api/images');
+    const data = await resp.json();
+    renderManageImages(data.images || []);
+  } catch (err) {
+    el.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-600 text-sm">${err.message}</td></tr>`;
+  }
+}
+
+function renderManageImages(images) {
+  const el = document.getElementById('manage-list');
+  if (!images.length) {
+    el.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-400 text-sm italic">No images in the database.</td></tr>';
+    return;
+  }
+
+  let html = '';
+  images.forEach(img => {
+    const ts = img.created_at ? new Date(img.created_at).toLocaleString() : '';
+    html += `<tr class="fade-in hover:bg-gray-50" id="img-row-${img.id}">`;
+    html += `<td class="px-6 py-4 whitespace-nowrap"><img src="/images/${img.id}" class="w-16 h-16 object-cover rounded-md border border-gray-200" alt="Preview"/></td>`;
+    html += `<td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${escHtml(img.filename)}</div></td>`;
+    html += `<td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${escHtml(img.content_type)}</div></td>`;
+    html += `<td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${ts}</div></td>`;
+    html += `<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">`;
+    html += `<button onclick="deleteImage(${img.id})" class="text-red-600 hover:text-red-900">Delete</button>`;
+    html += `</td>`;
+    html += `</tr>`;
+  });
+  el.innerHTML = html;
+}
+
+async function deleteImage(id) {
+  if (!confirm('Are you sure you want to delete this image?')) return;
+  
+  try {
+    const resp = await fetch(`/api/images/${id}`, { method: 'DELETE' });
+    if (resp.ok) {
+      document.getElementById(`img-row-${id}`).remove();
+    } else {
+      const data = await resp.json();
+      alert(data.detail || 'Failed to delete image');
+    }
+  } catch (err) {
+    alert('Failed to delete image: ' + err.message);
+  }
 }
 </script>
 </body>

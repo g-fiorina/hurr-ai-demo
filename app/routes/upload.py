@@ -69,46 +69,47 @@ async def _ingest_image(image_bytes: bytes, filename: str) -> dict:
 
 
 @router.post("/upload")
-async def upload_images(request: Request, file: UploadFile = File(...)) -> JSONResponse:
-    """Accept a single image or a ZIP archive of images. All stored in DB."""
+async def upload_images(request: Request, files: list[UploadFile] = File(...)) -> JSONResponse:
+    """Accept multiple images or a ZIP archive of images. All stored in DB."""
     results: list[dict] = []
     errors: list[str] = []
 
     db.connect(reuse_if_open=True)
     try:
-        if file.filename and file.filename.lower().endswith(".zip"):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zip_path = Path(tmpdir) / "upload.zip"
-                with open(zip_path, "wb") as f:
-                    f.write(await file.read())
+        for file in files:
+            if file.filename and file.filename.lower().endswith(".zip"):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    zip_path = Path(tmpdir) / "upload.zip"
+                    with open(zip_path, "wb") as f:
+                        f.write(await file.read())
 
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    zf.extractall(tmpdir)
+                    with zipfile.ZipFile(zip_path, "r") as zf:
+                        zf.extractall(tmpdir)
 
-                async def _ingest_one(img_file: Path) -> None:
-                    try:
-                        image_bytes = img_file.read_bytes()
-                        info = await _ingest_image(image_bytes, img_file.name)
-                        results.append(info)
-                    except Exception as exc:
-                        logger.exception("Failed to ingest %s", img_file.name)
-                        errors.append(f"{img_file.name}: {exc}")
+                    async def _ingest_one(img_file: Path) -> None:
+                        try:
+                            image_bytes = img_file.read_bytes()
+                            info = await _ingest_image(image_bytes, img_file.name)
+                            results.append(info)
+                        except Exception as exc:
+                            logger.exception("Failed to ingest %s", img_file.name)
+                            errors.append(f"{img_file.name}: {exc}")
 
-                tasks = [
-                    _ingest_one(img_file)
-                    for img_file in sorted(Path(tmpdir).rglob("*"))
-                    if img_file.is_file() and _is_image(img_file.name) and not img_file.name.startswith("._")
-                ]
-                await asyncio.gather(*tasks)
-        else:
-            try:
-                image_bytes = await file.read()
-                filename = file.filename or "image.jpg"
-                info = await _ingest_image(image_bytes, filename)
-                results.append(info)
-            except Exception as exc:
-                logger.exception("Failed to ingest %s", file.filename)
-                errors.append(f"{file.filename or 'file'}: {exc}")
+                    tasks = [
+                        _ingest_one(img_file)
+                        for img_file in sorted(Path(tmpdir).rglob("*"))
+                        if img_file.is_file() and _is_image(img_file.name) and not img_file.name.startswith("._")
+                    ]
+                    await asyncio.gather(*tasks)
+            else:
+                try:
+                    image_bytes = await file.read()
+                    filename = file.filename or "image.jpg"
+                    info = await _ingest_image(image_bytes, filename)
+                    results.append(info)
+                except Exception as exc:
+                    logger.exception("Failed to ingest %s", file.filename)
+                    errors.append(f"{file.filename or 'file'}: {exc}")
 
         return JSONResponse(
             {"status": "ok", "ingested": results, "errors": errors},
