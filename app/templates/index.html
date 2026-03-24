@@ -309,9 +309,9 @@ function buildComparisonGrid(results) {
       html += '<p class="text-sm text-gray-400 italic">No results</p>';
     } else {
       hits.forEach((h, i) => {
-        html += `<div class="flex items-center gap-3 mb-3 last:mb-0">`;
-        html += `<span class="text-xs font-bold ${c.badge} rounded-full w-6 h-6 flex items-center justify-center">${i+1}</span>`;
-        html += `<img src="/images/${h.image_id}" class="w-14 h-14 object-cover rounded-lg border border-gray-200" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>'"/>`;
+        html += `<div class="flex items-center gap-3 mb-4 last:mb-0">`;
+        html += `<span class="text-xs font-bold ${c.badge} rounded-full w-6 h-6 shrink-0 flex items-center justify-center">${i+1}</span>`;
+        html += `<img src="/images/${h.image_id}" class="w-24 h-24 object-contain rounded-lg border border-gray-200 bg-gray-100" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>'"/>`;
         html += `<div class="min-w-0 flex-1"><p class="text-xs font-medium truncate">${h.filename}</p>`;
         html += `<p class="text-xs text-gray-500">Score: ${h.similarity}</p></div>`;
         html += '</div>';
